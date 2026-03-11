@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>角色经验统计</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif; margin: 0; padding: 20px; background: #f5f6f8; }
+    h1 { font-size: 1.35rem; color: #1a1a2e; margin-bottom: 8px; }
+    .sub { color: #666; font-size: 0.9rem; margin-bottom: 20px; }
+    section { background: #fff; border-radius: 10px; padding: 16px 20px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+    section h2 { font-size: 1rem; color: #333; margin: 0 0 12px 0; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid #eee; }
+    th { color: #666; font-weight: 600; }
+    .num { text-align: right; font-variant-numeric: tabular-nums; }
+    .query-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
+    .query-row input[type=date] { padding: 8px 12px; border: 1px solid #ddd; border-radius: 6px; font-size: 1rem; }
+    .query-row button { padding: 8px 16px; background: #2563eb; color: #fff; border: none; border-radius: 6px; cursor: pointer; font-size: 0.95rem; }
+    .query-row button:hover { background: #1d4ed8; }
+    .empty { color: #999; padding: 16px 0; }
+    .total { font-weight: 600; color: #1a1a2e; }
+  </style>
+</head>
+<body>
+  <h1>角色经验统计</h1>
+  <p class="sub">数据与智能表格同步，从今天起按角色汇总差值总和；可查询任意日期当天练了多少经验。</p>
+
+  <section>
+    <h2>从今天起 · 各角色差值总和</h2>
+    <p class="sub" style="margin-bottom:12px;">统计日期 ≥ <span id="sinceDate">-</span></p>
+    <table>
+      <thead><tr><th>角色名称</th><th class="num">差值总和</th></tr></thead>
+      <tbody id="rolesBody"></tbody>
+      <tfoot><tr><td class="total">合计</td><td class="num total" id="rolesTotal">0</td></tr></tfoot>
+    </table>
+    <p id="rolesEmpty" class="empty" style="display:none;">暂无数据（今天起还没有记录）</p>
+  </section>
+
+  <section>
+    <h2>查询某天练了多少经验（差值）</h2>
+    <div class="query-row">
+      <input type="date" id="queryDate" />
+      <button type="button" id="queryBtn">查询</button>
+    </div>
+    <table id="dayTable" style="display:none;">
+      <thead><tr><th>角色名称</th><th class="num">当日差值</th></tr></thead>
+      <tbody id="dayBody"></tbody>
+      <tfoot><tr><td class="total">当日合计</td><td class="num total" id="dayTotal">0</td></tr></tfoot>
+    </table>
+    <p id="dayEmpty" class="empty" style="display:none;">该日暂无记录</p>
+  </section>
+
+  <script>
+    const base = window.location.origin;
+
+    function todayStr() {
+      const d = new Date();
+      return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+    }
+
+    async function loadRoleStats() {
+      const from = todayStr();
+      document.getElementById('sinceDate').textContent = from;
+      const res = await fetch(base + '/api/stats/roles?from=' + encodeURIComponent(from));
+      const data = await res.json();
+      const tbody = document.getElementById('rolesBody');
+      const totalEl = document.getElementById('rolesTotal');
+      const emptyEl = document.getElementById('rolesEmpty');
+      tbody.innerHTML = '';
+      const entries = Object.entries(data.roles || {}).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]);
+      let total = 0;
+      entries.forEach(([name, sum]) => {
+        total += sum;
+        const tr = document.createElement('tr');
+        tr.innerHTML = '<td>' + escapeHtml(name) + '</td><td class="num">' + sum.toLocaleString() + '</td>';
+        tbody.appendChild(tr);
+      });
+      totalEl.textContent = total.toLocaleString();
+      emptyEl.style.display = entries.length ? 'none' : 'block';
+    }
+
+    async function queryDay() {
+      const date = document.getElementById('queryDate').value;
+      if (!date) return;
+      const res = await fetch(base + '/api/query?date=' + encodeURIComponent(date));
+      const data = await res.json();
+      const table = document.getElementById('dayTable');
+      const tbody = document.getElementById('dayBody');
+      const totalEl = document.getElementById('dayTotal');
+      const emptyEl = document.getElementById('dayEmpty');
+      tbody.innerHTML = '';
+      const byRole = data.byRole || {};
+      const entries = Object.entries(byRole).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]);
+      let total = 0;
+      entries.forEach(([name, sum]) => {
+        total += sum;
+        const tr = document.createElement('tr');
+        tr.innerHTML = '<td>' + escapeHtml(name) + '</td><td class="num">' + sum.toLocaleString() + '</td>';
+        tbody.appendChild(tr);
+      });
+      totalEl.textContent = total.toLocaleString();
+      table.style.display = entries.length ? 'table' : 'none';
+      emptyEl.style.display = entries.length ? 'none' : 'block';
+    }
+
+    function escapeHtml(s) {
+      const div = document.createElement('div');
+      div.textContent = s;
+      return div.innerHTML;
+    }
+
+    document.getElementById('queryBtn').addEventListener('click', queryDay);
+    document.getElementById('queryDate').value = todayStr();
+    loadRoleStats();
+  </script>
+</body>
+</html>
